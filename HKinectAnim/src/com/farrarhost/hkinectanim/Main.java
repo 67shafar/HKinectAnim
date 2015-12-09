@@ -3,7 +3,8 @@ package com.farrarhost.hkinectanim;
 import com.farrarhost.hkinectanim.controllers.AppController;
 
 /**
- *
+ * This is the main class and function. Glues the MVC structure together. 
+ * Creates the default parameters.
  * @author farrar
  */
 public class Main {

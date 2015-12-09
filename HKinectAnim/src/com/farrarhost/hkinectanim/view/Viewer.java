@@ -1,8 +1,11 @@
 package com.farrarhost.hkinectanim.view;
 
 import com.farrarhost.hkinectanim.model.SkeletonFrames;
+import com.sun.j3d.utils.behaviors.mouse.MouseRotate;
+import com.sun.j3d.utils.behaviors.mouse.MouseTranslate;
+import com.sun.j3d.utils.behaviors.mouse.MouseWheelZoom;
+import com.sun.j3d.utils.geometry.ColorCube;
 import com.sun.j3d.utils.geometry.Cylinder;
-import com.sun.j3d.utils.geometry.Sphere;
 import com.sun.j3d.utils.universe.SimpleUniverse;
 import edu.ufl.digitalworlds.j4k.Skeleton;
 import java.awt.Dimension;
@@ -13,6 +16,7 @@ import java.util.Observable;
 import java.util.Observer;
 import javax.media.j3d.Appearance;
 import javax.media.j3d.BadTransformException;
+import javax.media.j3d.BoundingSphere;
 import javax.media.j3d.BranchGroup;
 import javax.media.j3d.Canvas3D;
 import javax.media.j3d.Group;
@@ -24,6 +28,7 @@ import javax.swing.JCheckBox;
 import javax.swing.JFrame;
 import javax.swing.JPanel;
 import javax.vecmath.AxisAngle4f;
+import javax.vecmath.Point3d;
 import javax.vecmath.Vector3f;
 
 /**
@@ -37,7 +42,7 @@ public class Viewer implements Observer {
     private final JButton stopButton;
     private final JCheckBox[] checkBoxes;
 
-    private final BranchGroup scene;
+    private final TransformGroup scene;
     private BranchGroup skeletonGroups;
 
     @Override
@@ -51,7 +56,9 @@ public class Viewer implements Observer {
                     skeletonGroups.removeAllChildren();
                 }
                 skeletonGroups = temp;
-                scene.addChild(temp);
+                if (this.scene != null) {
+                    scene.addChild(temp);
+                }
             } catch (NullPointerException | IndexOutOfBoundsException e) {
 
             }
@@ -59,6 +66,10 @@ public class Viewer implements Observer {
         }
     }
 
+    /**
+     * This enum is used to store action commands so that the appCtrl
+     * can distinguish what it is listening too. 
+     */
     private enum Actions {
         STARTKINECT,
         STOPKINECT,
@@ -70,6 +81,10 @@ public class Viewer implements Observer {
         C6
     }
 
+    /**
+     * Constructs the viewer. 
+     * @param appCtrl 
+     */
     public Viewer(ActionListener appCtrl) {
         //Setup controls
         JPanel controlPanel = new JPanel(new FlowLayout());
@@ -113,7 +128,33 @@ public class Viewer implements Observer {
 
         //Configure Universe
         SimpleUniverse universe = new SimpleUniverse(canvas);
-        scene = createSceneGraph();
+        BranchGroup scene = createSceneGraph();
+
+        //Transform controls
+        TransformGroup tGroup = new TransformGroup();
+        tGroup.setCapability(Group.ALLOW_CHILDREN_EXTEND);
+        tGroup.setCapability(Group.ALLOW_CHILDREN_WRITE);
+        tGroup.setCapability(TransformGroup.ALLOW_TRANSFORM_WRITE);
+
+        BoundingSphere bBox = new BoundingSphere(
+                new Point3d(0.0, 0.0, 0.0), 10.0);
+        MouseRotate rotate = new MouseRotate();
+        rotate.setTransformGroup(tGroup);
+        tGroup.addChild(rotate);
+        rotate.setSchedulingBounds(bBox);
+
+        MouseTranslate translate = new MouseTranslate();
+        translate.setTransformGroup(tGroup);
+        tGroup.addChild(translate);
+        translate.setSchedulingBounds(bBox);
+
+        MouseWheelZoom wheelZoom = new MouseWheelZoom();
+        wheelZoom.setTransformGroup(tGroup);
+        tGroup.addChild(wheelZoom);
+        wheelZoom.setSchedulingBounds(bBox);
+
+        this.scene = tGroup;
+        scene.addChild(this.scene);
 
         universe.getViewingPlatform().setNominalViewingTransform();
         universe.addBranchGraph(scene);
@@ -123,6 +164,10 @@ public class Viewer implements Observer {
         frame.setVisible(true);
     }
 
+    /**
+     * Creates the scene Graph
+     * @return 
+     */
     private BranchGroup createSceneGraph() {
         //Create a branchgroup that can have its children edited.
         BranchGroup sceneGraph = new BranchGroup();
@@ -132,6 +177,11 @@ public class Viewer implements Observer {
         return sceneGraph;
     }
 
+    /**
+     * Stores groups of skeletons. Need an array of skeletons to construct.
+     * @param skeletonArray
+     * @return 
+     */
     private BranchGroup createSkeletonGroups(Skeleton[] skeletonArray) {
         BranchGroup group = new BranchGroup();
         group.setCapability(BranchGroup.ALLOW_DETACH);
@@ -145,21 +195,26 @@ public class Viewer implements Observer {
         return group;
     }
 
+    /**
+     * A group the represents a skeleton made up of joints and bones.
+     * Need a skeleton object to construct.
+     * @param skeleton
+     * @return 
+     */
     private BranchGroup createSkeletonGroup(Skeleton skeleton) {
 
         //setup geomerty and variables
         BranchGroup skeletonGroup = new BranchGroup();
         int length = skeleton.getJointPositions().length / 3;
         TransformGroup[] jointTransforms = new TransformGroup[length];
-        Sphere[] jointGeom = new Sphere[length];
+        ColorCube[] jointGeom = new ColorCube[length];
 
         //setup appearance of joints
-        Material mat = new Material();
-        mat.setEmissiveColor(0, 255, 0);
-        mat.setLightingEnable(true);
-        Appearance app = new Appearance();
-        app.setMaterial(mat);
-
+//        Material mat = new Material();
+//        mat.setEmissiveColor(0, 255, 0);
+//        mat.setLightingEnable(true);
+//        Appearance app = new Appearance();
+//        app.setMaterial(mat);
         double[] pos;
         Transform3D transform = new Transform3D();
         Vector3f translation;
@@ -168,15 +223,16 @@ public class Viewer implements Observer {
             pos = skeleton.get3DJoint(i);
             //adjust z-axis for viewing.
             translation
-                    = new Vector3f((float) pos[0], (float) pos[1], -(float) pos[2]);
+                    = new Vector3f(
+                            (float) pos[0], (float) pos[1], -(float) pos[2]);
 
             //check to see if a finger of larger joint via joint_id < 21
             if (i < 21) {
-                jointGeom[i] = new Sphere(.0235f);
+                jointGeom[i] = new ColorCube(.0235f);
             } else {
-                jointGeom[i] = new Sphere(.0085f);
+                jointGeom[i] = new ColorCube(.0085f);
             }
-            jointGeom[i].setAppearance(app);
+            //jointGeom[i].setAppearance(app);
             jointTransforms[i] = new TransformGroup();
             transform.setIdentity();
             try {
@@ -192,38 +248,58 @@ public class Viewer implements Observer {
 
         //Draw spine
         for (int i = 0; i < 3; i++) {
-            skeletonGroup.addChild(drawBone(skeleton.get3DJoint(i), skeleton.get3DJoint(i + 1)));
+            skeletonGroup.addChild(drawBone(skeleton.get3DJoint(i),
+                    skeleton.get3DJoint(i + 1)));
         }
 
         //Draw arms
         for (int i = 0; i < 3; i++) {
-            skeletonGroup.addChild(drawBone(skeleton.get3DJoint(i + 4), skeleton.get3DJoint(i + 5)));
-            skeletonGroup.addChild(drawBone(skeleton.get3DJoint(i + 8), skeleton.get3DJoint(i + 9)));
+            skeletonGroup.addChild(drawBone(skeleton.get3DJoint(i + 4),
+                    skeleton.get3DJoint(i + 5)));
+            skeletonGroup.addChild(drawBone(skeleton.get3DJoint(i + 8),
+                    skeleton.get3DJoint(i + 9)));
         }
 
         //Draw torso
-        skeletonGroup.addChild(drawBone(skeleton.get3DJoint(8), skeleton.get3DJoint(20)));
-        skeletonGroup.addChild(drawBone(skeleton.get3DJoint(20), skeleton.get3DJoint(4)));
+        skeletonGroup.addChild(drawBone(skeleton.get3DJoint(8),
+                skeleton.get3DJoint(20)));
+        skeletonGroup.addChild(drawBone(skeleton.get3DJoint(20),
+                skeleton.get3DJoint(4)));
 
         //Draw hips
-        skeletonGroup.addChild(drawBone(skeleton.get3DJoint(16), skeleton.get3DJoint(0)));
-        skeletonGroup.addChild(drawBone(skeleton.get3DJoint(0), skeleton.get3DJoint(12)));
+        skeletonGroup.addChild(drawBone(skeleton.get3DJoint(16),
+                skeleton.get3DJoint(0)));
+        skeletonGroup.addChild(drawBone(skeleton.get3DJoint(0),
+                skeleton.get3DJoint(12)));
 
         //Draw legs
         for (int i = 0; i < 3; i++) {
-            skeletonGroup.addChild(drawBone(skeleton.get3DJoint(i + 16), skeleton.get3DJoint(i + 17)));
-            skeletonGroup.addChild(drawBone(skeleton.get3DJoint(i + 12), skeleton.get3DJoint(i + 13)));
+            skeletonGroup.addChild(drawBone(skeleton.get3DJoint(i + 16),
+                    skeleton.get3DJoint(i + 17)));
+            skeletonGroup.addChild(drawBone(skeleton.get3DJoint(i + 12),
+                    skeleton.get3DJoint(i + 13)));
         }
 
         //hands and feet
-        skeletonGroup.addChild(drawBone(skeleton.get3DJoint(23), skeleton.get3DJoint(11)));
-        skeletonGroup.addChild(drawBone(skeleton.get3DJoint(24), skeleton.get3DJoint(11)));
-        skeletonGroup.addChild(drawBone(skeleton.get3DJoint(21), skeleton.get3DJoint(7)));
-        skeletonGroup.addChild(drawBone(skeleton.get3DJoint(22), skeleton.get3DJoint(7)));
+        skeletonGroup.addChild(drawBone(skeleton.get3DJoint(23),
+                skeleton.get3DJoint(11)));
+        skeletonGroup.addChild(drawBone(skeleton.get3DJoint(24),
+                skeleton.get3DJoint(11)));
+        skeletonGroup.addChild(drawBone(skeleton.get3DJoint(21),
+                skeleton.get3DJoint(7)));
+        skeletonGroup.addChild(drawBone(skeleton.get3DJoint(22),
+                skeleton.get3DJoint(7)));
 
+        //toggleShapes
         return skeletonGroup;
     }
 
+    /**
+     * Created a bone between two vertexes/joints.
+     * @param pos1
+     * @param pos2
+     * @return 
+     */
     private TransformGroup drawBone(double[] pos1, double[] pos2) {
         //Setup looks of bones.
         Material mat = new Material();
@@ -247,11 +323,20 @@ public class Viewer implements Observer {
         return boneGroup;
     }
 
+    /**
+     * Calculates the transformation matrix of a bone for the skeleton
+     * using 2 vertexes/joints.
+     * @param pos1
+     * @param pos2
+     * @return 
+     */
     private Transform3D boneTransform(double[] pos1, double[] pos2) {
 
         //inital vectors
-        Vector3f a = new Vector3f((float) pos1[0], (float) pos1[1], -(float) pos1[2]);
-        Vector3f b = new Vector3f((float) pos2[0], (float) pos2[1], -(float) pos2[2]);
+        Vector3f a = new Vector3f(
+                (float) pos1[0], (float) pos1[1], -(float) pos1[2]);
+        Vector3f b = new Vector3f(
+                (float) pos2[0], (float) pos2[1], -(float) pos2[2]);
         Vector3f da = new Vector3f(a.x - b.x, a.y - b.y, a.z - b.z);
         Vector3f crossP = new Vector3f();
         Vector3f YAXIS = new Vector3f(0, 1, 0);
@@ -265,8 +350,8 @@ public class Viewer implements Observer {
         angle.set(crossP, (float) Math.acos(YAXIS.dot(da)));
 
         //Calcuate Translation
-        Vector3f midpoint
-                = new Vector3f((a.x + b.x) / 2, (a.y + b.y) / 2, (a.z + b.z) / 2);
+        Vector3f midpoint = new Vector3f(
+                (a.x + b.x) / 2, (a.y + b.y) / 2, (a.z + b.z) / 2);
 
         //Calculate transform
         Transform3D rotation = new Transform3D();
@@ -280,6 +365,12 @@ public class Viewer implements Observer {
         return translation;
     }
 
+    /**
+     * Calculates distance between two vectors.
+     * @param pos1
+     * @param pos2
+     * @return 
+     */
     private double vectorMagnitude(double[] pos1, double[] pos2) {
         double x, y, z;
         x = pos1[0] - pos2[0];
@@ -291,6 +382,10 @@ public class Viewer implements Observer {
 
     }
 
+    /**
+     * Injects the controller/action listner into the Swing components. 
+     * @param appCtrl 
+     */
     private void addAppController(ActionListener appCtrl) {
 
         //Add appCtrl to listen for ActionCommands
