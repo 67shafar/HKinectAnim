@@ -1,6 +1,7 @@
-package com.farrarhost.hkinectanim.controllers;
+package com.farrarhost.hkinectanim.utils;
 
 import com.farrarhost.hkinectanim.AppParameters;
+import com.farrarhost.hkinectanim.model.SkeletonFrames;
 import edu.ufl.digitalworlds.j4k.J4KSDK;
 import edu.ufl.digitalworlds.j4k.Skeleton;
 
@@ -12,11 +13,13 @@ import edu.ufl.digitalworlds.j4k.Skeleton;
 public class HKinect extends J4KSDK {
 
     AppParameters params;
-    
-    public HKinect(AppParameters params){
+    SkeletonFrames frames;
+
+    public HKinect(AppParameters params, SkeletonFrames frames) {
         this.params = params;
+        this.frames = frames;
     }
-    
+
     @Override
     public void onColorFrameEvent(byte[] color_frame) {
         //implement
@@ -25,11 +28,8 @@ public class HKinect extends J4KSDK {
     @Override
     public void onSkeletonFrameEvent(boolean[] skeleton_tracked, float[] positions, float[] orientations, byte[] joint_status) {
 
-        Skeleton skeletons[] = new Skeleton[getMaxNumberOfSkeletons()];
-        for (int i = 0; i < getMaxNumberOfSkeletons(); i++) {
-            skeletons[i] = Skeleton.getSkeleton(i, skeleton_tracked, positions,
-                    orientations, joint_status, this);
-        }
+        Skeleton skeletons[] = this.getSkeletons();
+        frames.add(skeletons);
 
     }
 
